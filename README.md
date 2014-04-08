@@ -1,4 +1,5 @@
-simplecowfs allows turning read-only files to read-write ones my storing small amount of changes in memory.
+simplecowfs allows you to turn read-only files into read-write ones by storing small amount of changes in memory.
+Useful for mounting read-only images with filesystems with unreplayed journal.
 
 Usage
 ---
