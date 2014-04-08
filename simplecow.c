@@ -105,13 +105,17 @@ int simplecow_read1(struct simplecow *cow, long long int offset, int size, char*
 
 int simplecow_read(struct simplecow *cow, long long int offset, int size, char* buf) {
     int s = size;
+    int accumulator = 0;
     while(s>0) {
         int ret = simplecow_read1(cow, offset, s, buf);
+        if (ret==0) break;
+        if (ret<0) return ret;
         buf+=ret;
         offset+=ret;
+        accumulator += ret;
         s-=ret;
     }
-    return size;
+    return accumulator;
 }
 
 struct simplecow* simplecow_create(backing_read_t br, void* usr) {
