@@ -30,6 +30,8 @@
 #include <sys/xattr.h>
 #endif
 
+#include <sys/ioctl.h>
+
 static int xmp_getattr(const char *path, struct stat *stbuf)
 {
 	int res;
@@ -37,6 +39,28 @@ static int xmp_getattr(const char *path, struct stat *stbuf)
 	res = lstat(path, stbuf);
 	if (res == -1)
 		return -errno;
+	
+	fprintf(stderr, "mode=%08x S_IFBLK=%08x\n", stbuf->st_mode, S_IFBLK);
+	if ((stbuf->st_mode & S_IFMT) == S_IFBLK) {
+		stbuf->st_mode  = (stbuf->st_mode &~S_IFMT)  | S_IFREG;
+		
+		int f;
+		f = open(path, O_RDONLY);
+		if (f!=-1){
+			long long int file_size_in_bytes = 0;
+			#ifndef BLKGETSIZE64
+				#define BLKGETSIZE64	0x80041272
+			#endif
+		 	ioctl(f, BLKGETSIZE64, &file_size_in_bytes);
+			stbuf->st_size = file_size_in_bytes;
+			stbuf->st_blocks = stbuf->st_size / 512;
+			close(f);
+		}
+		
+	}
+	if ((stbuf->st_mode & S_IFMT) == S_IFCHR) {
+		stbuf->st_mode  = (stbuf->st_mode &~S_IFMT)  | S_IFREG;
+	}
 
 	return 0;
 }
