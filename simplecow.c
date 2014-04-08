@@ -120,15 +120,18 @@ int simplecow_read(struct simplecow *cow, long long int offset, int size, char* 
 
 struct simplecow* simplecow_create(backing_read_t br, void* usr) {
     struct simplecow *cow = (struct simplecow*)malloc(sizeof(*cow));
-    cow->extent_count = 0;
-    cow->extent_capacity = 128;
-    cow->extents = NULL;
-    cow->backing_read = br;
-    cow->backing_read_usr = usr;
+    if (cow) {
+        cow->extent_count = 0;
+        cow->extent_capacity = 128;
+        cow->extents = NULL;
+        cow->backing_read = br;
+        cow->backing_read_usr = usr;
+    }
     return cow;
 }
 void simplecow_destroy(struct simplecow* cow) {
     int i;
+    if(!cow) return;
     if(cow->extents) {
         for(i=0; i < cow->extent_count; ++i) {
             free(cow->extents[i].buf);   
