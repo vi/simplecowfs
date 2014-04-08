@@ -32,6 +32,16 @@
 #include <sys/xattr.h>
 #endif
 
+#include <semaphore.h>
+#include "simplecow.h"
+
+
+struct myinfo {
+    int fd;
+    sem_t sem;
+    struct simplecow* cow; // copy on write
+};
+
 static int simplecowfs_getattr(const char *path, struct stat *stbuf)
 {
 	int res;
@@ -49,8 +59,11 @@ static int simplecowfs_fgetattr(const char *path, struct stat *stbuf,
 	int res;
 
 	(void) path;
-
-	res = fstat(fi->fh, stbuf);
+	
+	struct myinfo* i = (struct myinfo*)(uintptr_t)  fi->fh;
+	if(!i) return -ENOSYS;
+	
+	res = fstat(i->fd, stbuf);
 	if (res == -1)
 		return -errno;
 
@@ -61,7 +74,7 @@ static int simplecowfs_access(const char *path, int mask)
 {
 	int res;
 
-	res = access(path, mask);
+	res = access(path, (mask&~0222));
 	if (res == -1)
 		return -errno;
 
@@ -221,35 +234,70 @@ static int simplecowfs_create(const char *path, mode_t mode, struct fuse_file_in
 	return -EACCES;
 }
 
+static int backing_read(void* usr, long long int off, int size, char* b);
+
 static int simplecowfs_open(const char *path, struct fuse_file_info *fi)
 {
 	int fd;
 
-	fd = open(path, fi->flags);
+	fd = open(path, (fi->flags & (~O_RDWR) & (~O_WRONLY)) | O_RDONLY);
 	if (fd == -1)
 		return -errno;
 
-	fi->fh = fd;
+	struct myinfo* i = (struct myinfo*)malloc(sizeof *i);
+	if(!i) {
+		close(fd);
+		return -ENOMEM;
+	}
+	i->fd = fd;
+    sem_init(&i->sem, 0, 1);
+    
+	i->cow = simplecow_create(&backing_read, (void*)i);
+    
+    fi->fh = (uintptr_t)  i;
+
 	return 0;
 }
 
-static int simplecowfs_read(const char *path, char *buf, size_t size, off_t offset,
-		    struct fuse_file_info *fi)
-{
+int backing_read(void* usr, long long int off, int size, char* b) {
+	struct myinfo* i  = (struct myinfo*)usr;
+	
 	int res;
 
-	(void) path;
-	res = pread(fi->fh, buf, size, offset);
+	res = pread(i->fd, b, size, off);
 	if (res == -1)
 		res = -errno;
 
 	return res;
 }
 
+static int simplecowfs_read(const char *path, char *buf, size_t size, off_t offset,
+		    struct fuse_file_info *fi)
+{
+	(void) path;
+	struct myinfo* i = (struct myinfo*)(uintptr_t)  fi->fh;
+	if(!i) return -ENOSYS;
+	
+    sem_wait(&i->sem);
+	
+	int ret = simplecow_read(i->cow, offset, size, buf);
+	
+    sem_post(&i->sem);
+	return ret;
+}
+
 static int simplecowfs_write(const char *path, const char *buf, size_t size,
 		     off_t offset, struct fuse_file_info *fi)
 {
-	return -EACCES;
+	struct myinfo* i = (struct myinfo*)(uintptr_t)  fi->fh;
+	if(!i) return -ENOSYS;
+	
+    sem_wait(&i->sem);
+	
+	int ret = simplecow_write(i->cow, offset, size, buf);
+	
+    sem_post(&i->sem);
+	return ret;
 }
 
 static int simplecowfs_statfs(const char *path, struct statvfs *stbuf)
@@ -265,25 +313,20 @@ static int simplecowfs_statfs(const char *path, struct statvfs *stbuf)
 
 static int simplecowfs_flush(const char *path, struct fuse_file_info *fi)
 {
-	int res;
-
-	(void) path;
-	/* This is called from every close on an open file, so call the
-	   close on the underlying filesystem.	But since flush may be
-	   called multiple times for an open file, this must not really
-	   close the file.  This is important if used on a network
-	   filesystem like NFS which flush the data/metadata on close() */
-	res = close(dup(fi->fh));
-	if (res == -1)
-		return -errno;
-
+	(void)path;
+	(void)fi;
 	return 0;
 }
 
 static int simplecowfs_release(const char *path, struct fuse_file_info *fi)
 {
 	(void) path;
-	close(fi->fh);
+	
+	struct myinfo* i = (struct myinfo*)(uintptr_t)  fi->fh;
+	if(!i) return -ENOSYS;
+	
+	simplecow_destroy(i->cow);
+	sem_destroy(&i->sem);
 
 	return 0;
 }
@@ -329,8 +372,11 @@ static int simplecowfs_lock(const char *path, struct fuse_file_info *fi, int cmd
 		    struct flock *lock)
 {
 	(void) path;
+	
+	struct myinfo* i = (struct myinfo*)(uintptr_t)  fi->fh;
+	if(!i) return -ENOSYS;
 
-	return ulockmgr_op(fi->fh, cmd, lock, &fi->lock_owner,
+	return ulockmgr_op(i->fd, cmd, lock, &fi->lock_owner,
 			   sizeof(fi->lock_owner));
 }
 
