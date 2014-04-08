@@ -157,158 +157,68 @@ static int simplecowfs_releasedir(const char *path, struct fuse_file_info *fi)
 
 static int simplecowfs_mknod(const char *path, mode_t mode, dev_t rdev)
 {
-	int res;
-
-	if (S_ISFIFO(mode))
-		res = mkfifo(path, mode);
-	else
-		res = mknod(path, mode, rdev);
-	if (res == -1)
-		return -errno;
-
-	return 0;
+	return -EACCES;
 }
 
 static int simplecowfs_mkdir(const char *path, mode_t mode)
 {
-	int res;
-
-	res = mkdir(path, mode);
-	if (res == -1)
-		return -errno;
-
-	return 0;
+	return -EACCES;
 }
 
 static int simplecowfs_unlink(const char *path)
 {
-	int res;
-
-	res = unlink(path);
-	if (res == -1)
-		return -errno;
-
-	return 0;
+	return -EACCES;
 }
 
 static int simplecowfs_rmdir(const char *path)
 {
-	int res;
-
-	res = rmdir(path);
-	if (res == -1)
-		return -errno;
-
-	return 0;
+	return -EACCES;
 }
 
 static int simplecowfs_symlink(const char *from, const char *to)
 {
-	int res;
-
-	res = symlink(from, to);
-	if (res == -1)
-		return -errno;
-
-	return 0;
+	return -EACCES;
 }
 
 static int simplecowfs_rename(const char *from, const char *to)
 {
-	int res;
-
-	res = rename(from, to);
-	if (res == -1)
-		return -errno;
-
-	return 0;
+	return -EACCES;
 }
 
 static int simplecowfs_link(const char *from, const char *to)
 {
-	int res;
-
-	res = link(from, to);
-	if (res == -1)
-		return -errno;
-
-	return 0;
+	return -EACCES;
 }
 
 static int simplecowfs_chmod(const char *path, mode_t mode)
 {
-	int res;
-
-	res = chmod(path, mode);
-	if (res == -1)
-		return -errno;
-
-	return 0;
+	return -EACCES;
 }
 
 static int simplecowfs_chown(const char *path, uid_t uid, gid_t gid)
 {
-	int res;
-
-	res = lchown(path, uid, gid);
-	if (res == -1)
-		return -errno;
-
-	return 0;
+	return -EACCES;
 }
 
 static int simplecowfs_truncate(const char *path, off_t size)
 {
-	int res;
-
-	res = truncate(path, size);
-	if (res == -1)
-		return -errno;
-
-	return 0;
+	return -EACCES;
 }
 
 static int simplecowfs_ftruncate(const char *path, off_t size,
 			 struct fuse_file_info *fi)
 {
-	int res;
-
-	(void) path;
-
-	res = ftruncate(fi->fh, size);
-	if (res == -1)
-		return -errno;
-
-	return 0;
+	return -EACCES;
 }
 
 static int simplecowfs_utimens(const char *path, const struct timespec ts[2])
 {
-	int res;
-	struct timeval tv[2];
-
-	tv[0].tv_sec = ts[0].tv_sec;
-	tv[0].tv_usec = ts[0].tv_nsec / 1000;
-	tv[1].tv_sec = ts[1].tv_sec;
-	tv[1].tv_usec = ts[1].tv_nsec / 1000;
-
-	res = utimes(path, tv);
-	if (res == -1)
-		return -errno;
-
-	return 0;
+	return -EACCES;
 }
 
 static int simplecowfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
-	int fd;
-
-	fd = open(path, fi->flags, mode);
-	if (fd == -1)
-		return -errno;
-
-	fi->fh = fd;
-	return 0;
+	return -EACCES;
 }
 
 static int simplecowfs_open(const char *path, struct fuse_file_info *fi)
@@ -339,14 +249,7 @@ static int simplecowfs_read(const char *path, char *buf, size_t size, off_t offs
 static int simplecowfs_write(const char *path, const char *buf, size_t size,
 		     off_t offset, struct fuse_file_info *fi)
 {
-	int res;
-
-	(void) path;
-	res = pwrite(fi->fh, buf, size, offset);
-	if (res == -1)
-		res = -errno;
-
-	return res;
+	return -EACCES;
 }
 
 static int simplecowfs_statfs(const char *path, struct statvfs *stbuf)
@@ -388,20 +291,6 @@ static int simplecowfs_release(const char *path, struct fuse_file_info *fi)
 static int simplecowfs_fsync(const char *path, int isdatasync,
 		     struct fuse_file_info *fi)
 {
-	int res;
-	(void) path;
-
-#ifndef HAVE_FDATASYNC
-	(void) isdatasync;
-#else
-	if (isdatasync)
-		res = fdatasync(fi->fh);
-	else
-#endif
-		res = fsync(fi->fh);
-	if (res == -1)
-		return -errno;
-
 	return 0;
 }
 
@@ -410,10 +299,7 @@ static int simplecowfs_fsync(const char *path, int isdatasync,
 static int simplecowfs_setxattr(const char *path, const char *name, const char *value,
 			size_t size, int flags)
 {
-	int res = lsetxattr(path, name, value, size, flags);
-	if (res == -1)
-		return -errno;
-	return 0;
+	return -EACCES;
 }
 
 static int simplecowfs_getxattr(const char *path, const char *name, char *value,
@@ -435,10 +321,7 @@ static int simplecowfs_listxattr(const char *path, char *list, size_t size)
 
 static int simplecowfs_removexattr(const char *path, const char *name)
 {
-	int res = lremovexattr(path, name);
-	if (res == -1)
-		return -errno;
-	return 0;
+	return -EACCES;
 }
 #endif /* HAVE_SETXATTR */
 
